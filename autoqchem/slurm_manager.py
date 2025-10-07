@@ -42,7 +42,7 @@ class slurm_manager(object):
         if remote_dir:
             self.remote_dir = remote_dir
         else:
-            self.remote_dir = f"/scratch/{'gpfs' if 'della' in host else 'network'}/{self.user}/gaussian"
+            self.remote_dir = f"/scratch/{self.user}"
         self.connection = None
 
     def connect(self) -> None:
@@ -589,8 +589,9 @@ class slurm_manager(object):
 
         n_processors = re.search("nprocshared=(.*?)\n", file_string).group(1)
 
-        if host in {'della', 'adroit'}:
-            constraint = {'della': '\"haswell|skylake\"', 'adroit': '\"skylake\"'}[host]
+        constraint = None
+        if host in {'della', 'adroit','nots'}:
+            constraint = {'della': '\"haswell|skylake\"', 'adroit': '\"skylake\"','nots': '\"skylake\"'}[host]
 
         output = ""
         output += f"#!/bin/bash\n"
@@ -599,12 +600,23 @@ class slurm_manager(object):
                       f"#SBATCH --ntasks-per-node={n_processors}\n" \
                       f"#SBATCH -t {wall_time}\n\n"
         else:
-            output += f"#SBATCH -N 1\n" \
-                      f"#SBATCH --ntasks-per-node={n_processors}\n" \
-                      f"#SBATCH -t {wall_time}\n" \
-                      f"#SBATCH --constraint={constraint}\n\n"
+            output += (
+                f"#SBATCH --job-name={base_name}\n"
+                f"#SBATCH --account=commons\n"
+                f"#SBATCH --partition=commons\n"
+                f"#SBATCH --nodes=1\n"
+                f"#SBATCH --cpus-per-task=2\n"
+                f"#SBATCH --threads-per-core=1\n"
+                f"#SBATCH --mem-per-cpu=3G\n"
+                f"#SBATCH --ntasks-per-node={n_processors}\n"
+                f"#SBATCH -t {wall_time}\n"
+                f"#SBATCH --output={base_name}-%j.out\n"
+                f"#SBATCH --error={base_name}-%j.err\n"
+                f"module load Gaussian/16.C.01-AVX2\n"
+            )
+            
         if host == "adroit":
-            output += f"module load gaussian/g16\n\n"
+            output += f"module load Gaussian\n\n"
         output += f"input={base_name}\n\n"
         output += f"# run the code \n" \
                   f"cd {self.remote_dir}\n" \
